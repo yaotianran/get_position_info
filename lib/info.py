@@ -168,6 +168,7 @@ def output_attributes_pos_info(pos_info:PositionInfo, attributes: list[str, ...]
          message = f'output_attributes_pos_info: attribute {attr} ({type(attr)}) is not a string.'
          sys.exit(message)
 
+      attr_str = attr_str.strip()
       output_str += '\t' + __output_attr(pos_info, attr_str)
 
    return output_str.strip()
