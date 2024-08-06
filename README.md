@@ -1,0 +1,2 @@
+# get_position_info
+检查一个bam文件某些位点的相关信息
