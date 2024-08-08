@@ -5,12 +5,13 @@
 输出示例：
 [![d7NN54n.png](https://iili.io/d7NN54n.png)](https://freeimage.host/i/d7NN54n)
 
+---
 ### 1，安装
 
 get_position_info是一个python脚本，所以你必须安装python。除此之外必须安装pysam。
 脚本本身无需安装，直接运行
 
-
+---
 ### 2，基础用法
 
 `get_position_info.py [bam_file] [locus_file]`
@@ -19,6 +20,7 @@ get_position_info是一个python脚本，所以你必须安装python。除此之
 
 无论哪种格式，都会忽略空行和以'#'开头的行
 
+---
 ### 3，比较测序结果中位点与标准位点基因型的差异
 
 当你测定一些标准样本，例如GIAB的HG001 ～ HG007的样本，它们提供了一系列已知基因型的标准位点，或者你已经基于已有信息的构建了你自己的标准位点，你可以使用这些信息，get_position_info将自动计算bam中相关位点是否与标准位点的基因型相符。例如：
@@ -27,6 +29,7 @@ get_position_info是一个python脚本，所以你必须安装python。除此之
 
 输出的文件会附加几列，表示有多少碱基和InDel与标准位点的基因型相符
 
+---
 ### 4，获取位点在基因组上下游的序列
 
 当你发现某些位点的测序结果与标准基因型不符时，你可能想知道它们的基因组上下游序列，以便确定它们是否在重复序列区域或者存在以下特定的上下游pattern。这时你可以使用-r选项和-c选项，get_position_info会输出位点在参考基因组上下游的序列。例如：
@@ -35,7 +38,8 @@ get_position_info是一个python脚本，所以你必须安装python。除此之
 
 这里reference.fasta必须使用samtools faidx命令index，-c 5 表示 分别输出上下游5bp，加上位点本身，共11bp序列
 
-### 5，使用-f/--format选项输出位点的额外信息
+---
+### 5，使用 -f / --format选项输出位点的额外信息
 
 有时你需要位点的额外信息，例如位点的cycle，测序质量或者read的MAPQ值等等，你可以使用-f或--format选项获取额外的信息。当然有些信息只有同时使用-v或者-r选项时才有意义。例如：
 
@@ -110,3 +114,23 @@ unmatched_indel_mean_cycle
 # 位点所在位置的InDel的长度数量统计，正数为insert，负数为delete，0为无插入缺失
 indel_length_counter
 ```
+
+---
+### 6，FAQs
+
+- Q：为什么在X_count列不是一个整数，而是四个整数？<br/>
+  A：X_count列的的格式为四个以逗号分割的整数，它们依次表示forward 1st read, forward 2nd read, reverse 1st read, reverse 2nd read。如果是单端测序，则forward 2nd read和reverse 2nd read都为0。将不同方向的reads数单独列出，可以帮助识别由一些PCR或者上下游序列造成的测序错误。
+<br/>
+
+- Q：miss和delete都是什么意思？<br/>
+  A：miss指在查询位点所在位置有read覆盖，但是位于read的delete内部，而delete和insert是指在VCF格式中，发生在查询位点所在位置后1bp的InDel。
+<br/>
+
+- Q：insert和delete所在的cycle是指哪个碱基？<br/>
+  A：insert和delete所在的cycle，如果在正向read中，为pysam.PileupRead.query_position_or_next 属性 + 1 。如果在反向read中，为read长度 - pysam.PileupRead.query_position_or_next
+<br/>
+
+- Q：怎样确定输出结果是正确的？<br/>
+  A：可以使用[IGV](https://igv.org/)手动查看位点信息。IGV的坐标是1-based，所以建议使用1-based的POS或VCF格式输入位点位置。
+
+  
