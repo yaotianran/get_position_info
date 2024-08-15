@@ -69,7 +69,7 @@ def get_real_variants_from_realsite(real_site_file: str) -> dict:
          i += 1
 
          if i % 100000 == 0:
-            print(i, line_lst, '                ', end = '\r')
+            print(i, line_lst, ' ' * 100, end = '\r')
    message = f'read {i} sites. Done.                         '
    print(message)
    return real_site_dict

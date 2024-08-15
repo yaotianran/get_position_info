@@ -25,7 +25,7 @@ def __parse_vcf(vcf_file: str, pass_only: bool = True, qual = 0) -> Iterator[str
          else:
             line_str = line.strip()
 
-         if line_str == '' or line.startswith('#'):
+         if line_str == '' or line_str.startswith('#'):
             continue
 
          try:
@@ -197,7 +197,7 @@ def read_reference(reference: str) -> tuple:
       message = 'Index file {} not found or not readable'.format(indexfile)
       raise FileNotFoundError(message)
 
-   hanel = open(refer_str, 'rt')
+   handle = open(refer_str, 'rt')
 
    index_dict = {}
    with open(file = indexfile, mode = 'rt') as index_f:
@@ -211,10 +211,10 @@ def read_reference(reference: str) -> tuple:
             continue
    print('Read', len(index_dict), 'chromosomes')
 
-   return hanel, index_dict
+   return handle, index_dict
 
 
-def get_base_fast(genome_reference_file_handle, index_dict, chrom, start, end=0) -> str:
+def get_base_fast(genome_reference_file_handle, index_dict, chrom, start, end = 0) -> str:
    '''
    Get the specific bases from an index genome file. (samtools faidx <ref.fasta>)
    This function is fast enough to be used in millions of iterations
@@ -278,3 +278,65 @@ def get_base_fast(genome_reference_file_handle, index_dict, chrom, start, end=0)
 def slice_list(in_list: list, chunk_num: int):
    return [in_list[x::chunk_num] for x in range(chunk_num)]
 
+# 通过脚本的参数来确定输出的header和信息字段
+# ARGUMENTS_DICT 参数字典
+# 返回值 header_lst
+def assign_columns_list(arguments_dict:dict) -> list[str, ...]:
+
+   # ['chrom', 'pos',
+   # 'reference', 'context', 'coverage',
+   # 'query_snp_counter', 'real_allele_snp', 'matched_snp_count', 'unmatched_snp_count',
+   # 'query_indel_counter', 'real_allele_indel', 'matched_indel_count', 'unmatched_indel_count',
+   # 'A_count', 'T_count', 'C_count', 'G_count', 'N_count', 'miss_count', 'background_count']
+
+   # 是否有参考基因组文件
+   if arguments_dict['REFERENCE'] != '':
+      genome_lst = ['reference', 'context']
+   else:
+      genome_lst = []
+
+   # 是否添加标准位点比较信息
+   if arguments_dict['VCF_FILE'] != '' or arguments_dict['LOCUS_AS_STANDARD']:  #  有标准位点信息
+      snp_compare_lst = ['real_allele_snp', 'matched_snp_count', 'unmatched_snp_count']
+      indel_compare_lst = ['real_allele_indel', 'matched_indel_count', 'unmatched_indel_count']
+
+   elif arguments_dict['REFERENCE'] != '':  # 没有标准位点信息，使用reference fasta
+      snp_compare_lst = ['matched_snp_count', 'unmatched_snp_count']
+      indel_compare_lst = []
+
+   else:
+      snp_compare_lst = []
+      indel_compare_lst = []
+
+
+   # 添加其他信息
+   if arguments_dict['ADD_OTHER']:
+      other_lst = ['other']
+   else:
+      other_lst = []
+
+   # 用户指定的字段
+   if arguments_dict['FORAMT_STRING'] != '':
+      format_lst = arguments_dict['FORAMT_STRING'].split().strip()
+   else:
+      format_lst = []
+
+   #
+   reult_lst = ['chrom', 'pos', 'coverage'] + genome_lst + ['query_snp_counter'] + snp_compare_lst + ['query_indel_counter'] + indel_compare_lst + ['A_count', 'T_count', 'C_count', 'G_count', 'N_count', 'miss_count', 'background_count'] + format_lst + other_lst
+
+   return reult_lst
+
+
+
+#  for test only
+class reference_class:
+   def __init__(self, fasta_file):
+      self.genome_reference_file_handle, self.index_dict = read_reference(fasta_file)
+      return None
+
+   def get_base_fast(self, chrom, start, end = 0):
+      seq = get_base_fast(self.genome_reference_file_handle, self.index_dict, chrom, start, end)
+      return seq
+
+   def close(self):
+      self.genome_reference_file_handle.close()

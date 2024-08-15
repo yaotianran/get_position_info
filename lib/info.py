@@ -87,6 +87,10 @@ class PositionInfo:
    real_allele_snp: list = field(default_factory=list)   # 原位allele，例如ATCG或者*
    real_allele_indel: list = field(default_factory=list)   # Indel allele，例如‘+2AC’, '-3NNN'等等。注意*和InDel不能出现在同一位点
 
+   # 储存LOH（Loss of Heterozygosity）信息
+   LOH_snp: list = field(default_factory=list)  # 储存缺失的allele，例如['G']表示Allele G 缺失
+   LOH_indel: list = field(default_factory=list) # 同上
+
    reference: str = None   # 该位置的ref碱基
    context: str = None # 该位置上下游的base
    other: str = None  # 其他信息
@@ -111,6 +115,28 @@ def __output_attr(pos_info:PositionInfo, attribute: str) -> str:
        适用于打印的字符串
 
    '''
+
+   # 对于 unmatched_snp_count 和 unmatched_indel_count 单独设置，因为要添加LOH信息
+   if attribute == 'unmatched_snp_count' and pos_info.LOH_snp != []:
+      count = getattr(pos_info, attribute)
+      loh_str = 'LOH: ' + ','.join(getattr(pos_info, 'LOH_snp'))
+      if count == [0, 0, 0, 0]:
+         value = loh_str
+      else:
+         value = '{} ({})'.format(str(count)[1:-1], loh_str)
+      return value
+
+   if attribute == 'unmatched_indel_count' and pos_info.LOH_indel != []:
+      count = getattr(pos_info, attribute)
+      loh_str = 'LOH: ' + ','.join(getattr(pos_info, 'LOH_indel'))
+      if count == [0, 0, 0, 0]:
+         value = loh_str
+      else:
+         value = '{} ({})'.format(str(count)[1:-1], loh_str)
+      return value
+
+
+   # = = = = = = 其他通用属性 = = = = = =
    try:
       value = getattr(pos_info, attribute)
    except AttributeError:
@@ -118,6 +144,8 @@ def __output_attr(pos_info:PositionInfo, attribute: str) -> str:
       print(message)
       sys.exit(message)
 
+
+   # 通用属性
    if isinstance(value, list):
       if value == []:
          return ''
@@ -229,6 +257,21 @@ def add_attributes_pos_info(pos_info:PositionInfo) -> int:
    pos_info.query_snp_counter = collections.Counter(pos_info.query_snp) if pos_info.query_snp != [] else None
    pos_info.query_indel_counter = collections.Counter(pos_info.query_indel) if pos_info.query_indel != [] else None
 
+
+   # 检测LOH
+   MAF = 0.1  #  只有MAF大于此值的SNP才视为检测到的SNP
+   if pos_info.query_snp_counter is not None and pos_info.real_allele_snp is not None and len(pos_info.real_allele_snp) == 2:
+      for snp in pos_info.real_allele_snp:
+         if pos_info.query_snp_counter[snp] / pos_info.coverage < MAF:
+            pos_info.LOH_snp.append(snp)
+
+
+   MAF = 0.1  #  只有MAF大于此值的InDel才视为检测到的InDel
+   if pos_info.query_indel_counter is not None and pos_info.real_allele_indel is not None and len(pos_info.real_allele_indel) >= 2:
+      for indel in pos_info.real_allele_indel:
+         if pos_info.query_indel_counter[indel] / pos_info.coverage < MAF:
+            pos_info.LOH_indel.append(indel)
+
    return 0
 
 
@@ -279,7 +322,7 @@ def add_attributes_pos_info(pos_info:PositionInfo) -> int:
 
 # matched_indel_cycle: List[int, ...]
 # unmatched_indel_cycle: List[int, ...]
-def get_pos_info(bam_af: pysam.AlignmentFile, chrom: str, pos: int, real_allele_snp: tuple[str, ...] = None, real_allele_indel: tuple[str, ...] = None) -> PositionInfo:
+def get_pos_info(bam_af: pysam.AlignmentFile, chrom: str, pos: int, real_allele_snp: tuple[str, ...] = None, real_allele_indel: tuple[str, ...] = None, ref_base: str = '') -> PositionInfo:
    '''
    提取位点信息，包括位点深度，四种碱基read数（百分比），四种碱基平均测序质量，四种碱基的正反向数量，四种碱基orientation数量等
 
@@ -298,6 +341,9 @@ def get_pos_info(bam_af: pysam.AlignmentFile, chrom: str, pos: int, real_allele_
          其中的每个元素是一个allele，string格式，通常tuple的长度为该物种的染色体倍性（Ploidy），如人类为2。
          real_allele_snp表示该位点所在位置的序列的种类和数量，碱基用ATCG， miss用*表示。
          real_allele_indel表示该位点所在位置后接InDel的序列的种类和数量，以samtools的格式表示，例如‘+2AC’, '-3NNN'等等。
+
+      **ref_base**: string
+         可选，用于在real_allele_snp为None的时候设置matched_snp_*和unmatched_snp_*属性
 
    Returns:
        **PositionInfo**: class
@@ -408,12 +454,27 @@ def get_pos_info(bam_af: pysam.AlignmentFile, chrom: str, pos: int, real_allele_
             result_pos.matched_snp_cycle.append(cycle_int)
             if base != 'miss':  # 只设置非miss的matched_snp_seq_quality
                result_pos.matched_snp_seq_quality.append(seq_quality_int)
-         elif real_allele_snp is not None and base not in real_allele_snp: #  matched:
+
+         elif real_allele_snp is not None and base not in real_allele_snp: #  unmatched:
             result_pos.unmatched_snp_count[flag_index_int] += 1
             result_pos.unmatched_snp_MAPQ.append(mapq_int)
             result_pos.unmatched_snp_cycle.append(cycle_int)
             if base != 'miss':  # 只设置非miss的unmatched_snp_seq_quality
                result_pos.unmatched_snp_seq_quality.append(seq_quality_int)
+
+         elif real_allele_snp is None and ref_base != '' and base == ref_base:  # matched genome reference
+            result_pos.matched_snp_count[flag_index_int] += 1
+            result_pos.matched_snp_MAPQ.append(mapq_int)
+            result_pos.matched_snp_cycle.append(cycle_int)
+            result_pos.matched_snp_seq_quality.append(seq_quality_int)
+
+         elif real_allele_snp is None and ref_base != '' and base != ref_base:  # unmatched genome reference
+            result_pos.unmatched_snp_count[flag_index_int] += 1
+            result_pos.unmatched_snp_MAPQ.append(mapq_int)
+            result_pos.unmatched_snp_cycle.append(cycle_int)
+            if base != 'miss':  # 只设置非miss的unmatched_snp_seq_quality
+               result_pos.unmatched_snp_seq_quality.append(seq_quality_int)
+
          else:
             pass
 
@@ -464,6 +525,8 @@ if __name__ == '__main__':
 
    import os.path as path
    import copy
+   import utils
+
 
    bam_file = '~/server/result/sequencer/for_partner/zgbio/snvindelLOD_20240717/qua25_unqua10_len50/bam/sample_03/sample_03.filter.bam'
    bam_file = '~/server/result/sequencer/salus/giab/hg003_na24149_father/wgs/pro63_modelopt_20240705/qua25_unqua10_len50/rmdup/hg003_na24149_modelopt/hg003_na24149_modelopt.rmdup.sorted.bam'
