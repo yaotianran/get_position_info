@@ -20,6 +20,8 @@ get_position_info是一个python脚本，所以你必须安装python。除此之
 
 无论哪种格式，都会忽略空行和以'#'开头的行
 
+脚本会输出一个tsv文件，包含bam_file在locus_file中各个位点的信息，例如覆盖度，碱基组成等.
+
 ---
 ### 3，比较测序结果中位点与标准位点基因型的差异
 
@@ -28,6 +30,10 @@ get_position_info是一个python脚本，所以你必须安装python。除此之
 `get_position_info.py -v <vcf_file> [bam_file] [locus_file]`
 
 输出的文件会附加几列，表示有多少碱基和InDel与标准位点的基因型相符
+
+如果你的Locus文件是VCF格式，并且具有完整的位点信息（REF，ALT, GT）。你可以使用-u 或者 --locus-as-standard选项，直接使用该文件作为标准位点文件。
+
+当你测序的样本没有标准位点文件时，例如微生物样本。脚本会自动使用reference fasta文件作为标准位点文件（如果使用-r选项）。显然此时只能获得标准的SNP信息，无法获得标准的InDel信息
 
 ---
 ### 4，获取位点在基因组上下游的序列
@@ -113,6 +119,9 @@ unmatched_indel_mean_cycle
 
 # 位点所在位置的InDel的长度数量统计，正数为insert，负数为delete，0为无插入缺失
 indel_length_counter
+
+# 附加信息
+other
 ```
 
 ---
