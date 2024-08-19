@@ -8,7 +8,7 @@
 ---
 ### 1，安装
 
-get_position_info是一个python脚本，所以你必须安装python。除此之外必须安装pysam。
+get_position_info是一个python脚本，所以你必须安装python。除此之外必须安装[pysam](https://pypi.org/project/pysam/)。
 脚本本身无需安装，直接运行
 
 ---
