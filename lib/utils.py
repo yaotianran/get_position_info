@@ -11,7 +11,7 @@ from collections.abc import Iterator
 BASES = ['A', 'T', 'C', 'G']
 
 # 所有的__parse_*函数都接受一个文件，并且返回一个包含染色体，位置和本行其他信息的Iterator
-def __parse_vcf(vcf_file: str, pass_only: bool = True, qual = 0) -> Iterator[str, int, str]:
+def __parse_vcf(vcf_file: str, pass_only: bool = False, qual = 0) -> Iterator[str, int, str]:
    '''
    解析vcf位置文件，返回一个包含染色体和位置的Iterator
    '''
@@ -33,13 +33,13 @@ def __parse_vcf(vcf_file: str, pass_only: bool = True, qual = 0) -> Iterator[str
             chrom = line_lst[0]
             pos = int(line_lst[1])
 
-            qual_int = int(line_lst[5])
+            qual_float = float(line_lst[5])
             filter_str = line_lst[6]
 
             if pass_only and filter_str != 'PASS':
                continue
 
-            if qual_int < qual:
+            if qual_float < qual:
                continue
 
          except Exception as ex:
@@ -317,7 +317,7 @@ def assign_columns_list(arguments_dict:dict) -> list[str, ...]:
 
    # 用户指定的字段
    if arguments_dict['FORAMT_STRING'] != '':
-      format_lst = arguments_dict['FORAMT_STRING'].split().strip()
+      format_lst = arguments_dict['FORAMT_STRING'].strip().split(',')
    else:
       format_lst = []
 

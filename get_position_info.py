@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # 点突变信息提取
-# v0.5
+# v0.5a
 # What's New:
 # 1，调整column的次序，将X_count后移，query_counter前移
 # 2, 如果没有标准位点则直接使用genome reference
@@ -234,12 +234,19 @@ def main(argvList = sys.argv, argv_int = len(sys.argv)):
         GOLDEN_FILE = LOCUS_FILE
 
     if GOLDEN_FILE != '':
-        if GOLDEN_FILE.endswith('.realsite') and os.access(GOLDEN_FILE, os.R_OK) or os.access(GOLDEN_FILE.split('.gz')[0] + '.realsite', os.R_OK):  #  如果GOLDEN_FILE 是 realsite文件
-            print('读取位点...')
+        if GOLDEN_FILE.endswith('.realsite') and os.access(GOLDEN_FILE, os.R_OK):  #  如果GOLDEN_FILE 是 realsite文件
+
+            print(f'读取位点(realsite) {GOLDEN_FILE} ...')
             real_site_dict = vcf.get_real_variants_from_realsite(GOLDEN_FILE)
 
+        elif os.access(GOLDEN_FILE.split('.gz')[0] + '.realsite', os.R_OK): #  如果存在缓存的realsite文件
+            GOLDEN_FILE = GOLDEN_FILE.split('.gz')[0] + '.realsite'
+            print(f'读取位点(realsite) {GOLDEN_FILE} ...')
+            real_site_dict = vcf.get_real_variants_from_realsite(GOLDEN_FILE)
+
+
         elif GOLDEN_FILE.endswith('.vcf') or GOLDEN_FILE.endswith('.vcf.gz'):  #  如果GOLDEN_FILE 是vcf文件
-            print('读取位点...')
+            print(f'读取位点(VCF) {GOLDEN_FILE} ...')
             real_site_dict = vcf.get_real_variants_from_vcf(GOLDEN_FILE)
 
         else:
@@ -255,6 +262,7 @@ def main(argvList = sys.argv, argv_int = len(sys.argv)):
 
 
     columns_list = utils.assign_columns_list(ARGUMENTS_DICT)
+    print(f'输出信息为{columns_list}')
     header_str = '\t'.join(columns_list)
     if not IS_NO_HEADER:
         q.put(header_str + '\n')
@@ -289,5 +297,6 @@ def main(argvList = sys.argv, argv_int = len(sys.argv)):
 
 if __name__ == '__main__':
     r = get_arguments()
+    print()
     main()
 
