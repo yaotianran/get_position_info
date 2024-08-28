@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # 点突变信息提取
-# v0.5a
+# v0.5c
 # What's New:
-# 1，调整column的次序，将X_count后移，query_counter前移
-# 2, 如果没有标准位点则直接使用genome reference
-# 3, 添加 ‘other’ 字段
+# 2, 增加选项设置：LOH 的SNP MAF阈值
+# 3, 增加选项设置：是否使用LOCUS VCF中 FILTER 字段不为PASS的位点（FILTER 为'.'会被直接使用，不受此选项影响）
+# 4, 增加选项设置：GOLD_FILE中如果没有GT信息是否报错 。还是默认het， 或者homo
+# 4, 增加输出信息：X_MAF
 
 # TODO:
 # 2, 输出进度时，显示总数
@@ -53,13 +54,15 @@ def get_arguments() -> None:
     parser_ar.add_argument('-r', '--reference', default='', help= 'FILE. faidx indexed参考基因组文件（.fasta）', metavar = '', dest='REFERENCE')
     parser_ar.add_argument('-v', '--vcf', default='', help= 'FILE. 标准位点VCF文件', metavar = '', dest='VCF_FILE')
     parser_ar.add_argument('-c', '--context', default=5, type=int, help= 'INT. 提取上下游的各n个碱基写入结果文件，默认值为5', metavar = '', dest='CONTEXT_FLANK')
-
     parser_ar.add_argument('-f', '--format', default='', help= 'STR. 需要额外输出的位点信息，用,分割，例如matched_snp_cycle,unmatched_snp_cycle', metavar = '', dest='FORAMT_STRING')
     parser_ar.add_argument('-n', '--no-header', action='store_true', default=False, help= '输出文件不需要header', dest='IS_NO_HEADER')
     parser_ar.add_argument('-u', '--locus-as-standard', action='store_true', default=False, help= '如果locus为VCF文件，则直接使用它作为标准位点', dest='LOCUS_AS_STANDARD')
     parser_ar.add_argument('-a', '--add-other-info', action='store_true', default=False, help= '在输出文件的尾部添加locus文件中的附加信息', dest='ADD_OTHER')
     parser_ar.add_argument('-t', '--threads', default = 16, type=int, help= 'INT. 进程数，默认值为16', metavar = '', dest='PROCESS')
 
+    parser_ar.add_argument('--loh', default = 0.2, type = float, help= 'FLOAT. MAF低于此值的SNP会被标记成LOH，默认值为0.2', metavar = '', dest='LOH_CUTOFF')
+    parser_ar.add_argument('--locus_use_not_pass', action = 'store_true', default = False, help= '如果locus为VCF文件，即使FILTER字段不为PASS，也会使用该位点', dest='LOCUS_USE_NOT_PASS')
+    parser_ar.add_argument('--vcf_no_gt_failback', default = 'homo', choices = ['homo', 'het'], help= 'STR. 如果标准位点VCF中没有GT信息，那么默认是纯合homo，还是杂合het', metavar = 'homo', dest='VCF_NO_GT_FALLBACK')
 
 
     paramters = parser_ar.parse_args()
@@ -72,12 +75,16 @@ def get_arguments() -> None:
     ARGUMENTS_DICT['REFERENCE'] = paramters.REFERENCE
     ARGUMENTS_DICT['VCF_FILE'] = paramters.VCF_FILE
     ARGUMENTS_DICT['CONTEXT_FLANK'] = int(paramters.CONTEXT_FLANK)
-
     ARGUMENTS_DICT['FORAMT_STRING'] = paramters.FORAMT_STRING
     ARGUMENTS_DICT['IS_NO_HEADER'] = paramters.IS_NO_HEADER
     ARGUMENTS_DICT['LOCUS_AS_STANDARD'] = paramters.LOCUS_AS_STANDARD
     ARGUMENTS_DICT['ADD_OTHER'] = paramters.ADD_OTHER
     ARGUMENTS_DICT['PROCESS'] = paramters.PROCESS
+
+
+    ARGUMENTS_DICT['LOH_CUTOFF'] = paramters.LOH_CUTOFF
+    ARGUMENTS_DICT['LOCUS_USE_NOT_PASS'] = paramters.LOCUS_USE_NOT_PASS
+    ARGUMENTS_DICT['VCF_NO_GT_FALLBACK'] = paramters.VCF_NO_GT_FALLBACK
 
     return None
 
@@ -98,7 +105,7 @@ def write_file(q: mp.Queue, output_file: str):
 
     return None
 
-def multiple_process_helper(bam_file: str, loci_lst: list, format_list: list, q: mp.Queue, reference_file: str = '', real_site_dict: dict = None, flank: int = 5, counter: mp.Value = None, lock: mp.Lock = None) -> int:
+def multiple_process_helper(bam_file: str, loci_lst: list, format_list: list, q: mp.Queue, reference_file: str = '', real_site_dict: dict = None, flank: int = 5, loh_cutoff: float = 0.2, counter: mp.Value = None, lock: mp.Lock = None) -> int:
     '''
     多线程运行的helper，负责打开bam_file, 返回句柄，收集位点信息，写入StringIO
 
@@ -135,7 +142,7 @@ def multiple_process_helper(bam_file: str, loci_lst: list, format_list: list, q:
             counter.value += 1
             if counter.value % 1000 == 0:
                 print(' '*50, end = '\r')
-                print('{}\t{}\t{}'.format(counter.value, chrom, pos), end = '\r')
+                print('{}\t{}\t{}'.format(counter.value, chrom, pos, other_str), end = '\r')
 
             if genome_reference_file_handle is not None and index_dict is not None:
                 ref_base = utils.get_base_fast(genome_reference_file_handle, index_dict, chrom, pos)
@@ -168,7 +175,7 @@ def multiple_process_helper(bam_file: str, loci_lst: list, format_list: list, q:
             print(message)
             continue
 
-        _ = info.add_attributes_pos_info(pos_PositionInfo)
+        _ = info.add_attributes_pos_info(pos_PositionInfo, loh_cutoff)
         line_str = info.output_attributes_pos_info(pos_PositionInfo, format_list)
         q.put(line_str + '\n')
 
@@ -181,13 +188,6 @@ def multiple_process_helper(bam_file: str, loci_lst: list, format_list: list, q:
         genome_reference_file_handle.close()
     except:
         pass
-
-
-    try:
-        genome_reference.close()
-    except:
-        pass
-
 
     return 0
 
@@ -217,10 +217,15 @@ def main(argvList = sys.argv, argv_int = len(sys.argv)):
 
     # golden sites
     GOLDEN_FILE = ARGUMENTS_DICT['VCF_FILE']
+    VCF_NO_GT_FALLBACK = ARGUMENTS_DICT['VCF_NO_GT_FALLBACK']
 
     CONTEXT_FLANK = ARGUMENTS_DICT['CONTEXT_FLANK']
     if CONTEXT_FLANK < 0:
         CONTEXT_FLANK = 0
+
+    # loh
+    LOH_CUTOFF = ARGUMENTS_DICT['LOH_CUTOFF']
+
 
     IS_NO_HEADER = ARGUMENTS_DICT['IS_NO_HEADER']
     LOCUS_AS_STANDARD = ARGUMENTS_DICT['LOCUS_AS_STANDARD']
@@ -247,7 +252,7 @@ def main(argvList = sys.argv, argv_int = len(sys.argv)):
 
         elif GOLDEN_FILE.endswith('.vcf') or GOLDEN_FILE.endswith('.vcf.gz'):  #  如果GOLDEN_FILE 是vcf文件
             print(f'读取位点(VCF) {GOLDEN_FILE} ...')
-            real_site_dict = vcf.get_real_variants_from_vcf(GOLDEN_FILE)
+            real_site_dict = vcf.get_real_variants_from_vcf(GOLDEN_FILE, qual = 0, no_gt_fall_back = VCF_NO_GT_FALLBACK)
 
         else:
             message = f'标准位点必须是vcf文件或者是realsite文件，输入为{GOLDEN_FILE}'
@@ -269,10 +274,11 @@ def main(argvList = sys.argv, argv_int = len(sys.argv)):
 
 
     print('读取位置...')
-    locus_iter = utils.parse_locus(LOCUS_FILE, ARGUMENTS_DICT['LOCUS_FORMAT'])  # chrom, int, other
+    locus_iter = utils.parse_locus(LOCUS_FILE, ARGUMENTS_DICT['LOCUS_FORMAT'], ARGUMENTS_DICT['LOCUS_USE_NOT_PASS'])  # chrom, int, other
     locus_lst = list(locus_iter)  # [[chrom, int, other], [chrom, int, other], ...]
     chunk_int = min([len(locus_lst), PROCESS])
     item_lst = utils.slice_list(locus_lst, chunk_int)
+    print(f'读入 {len(locus_lst)} 位置')
 
 
     pool = mp.Pool(chunk_int)
@@ -281,7 +287,7 @@ def main(argvList = sys.argv, argv_int = len(sys.argv)):
     jobs = []
     for loci_lst in item_lst:
         # real_site_dict
-        job = pool.apply_async(multiple_process_helper, (BAM_FILE, loci_lst, columns_list, q, REFERENCE_FILE, real_site_dict, CONTEXT_FLANK, counter, counter_lock, ))
+        job = pool.apply_async(multiple_process_helper, (BAM_FILE, loci_lst, columns_list, q, REFERENCE_FILE, real_site_dict, CONTEXT_FLANK, LOH_CUTOFF, counter, counter_lock, ))
         jobs.append(job)
 
     for job in jobs:

@@ -11,7 +11,7 @@ from collections.abc import Iterator
 BASES = ['A', 'T', 'C', 'G']
 
 # 所有的__parse_*函数都接受一个文件，并且返回一个包含染色体，位置和本行其他信息的Iterator
-def __parse_vcf(vcf_file: str, pass_only: bool = False, qual = 0) -> Iterator[str, int, str]:
+def __parse_vcf(vcf_file: str, locus_use_no_pass: bool = False, qual = 0) -> Iterator[str, int, str]:
    '''
    解析vcf位置文件，返回一个包含染色体和位置的Iterator
    '''
@@ -36,7 +36,7 @@ def __parse_vcf(vcf_file: str, pass_only: bool = False, qual = 0) -> Iterator[st
             qual_float = float(line_lst[5])
             filter_str = line_lst[6]
 
-            if pass_only and filter_str != 'PASS':
+            if not locus_use_no_pass and filter_str not in ['PASS', '.']:
                continue
 
             if qual_float < qual:
@@ -109,7 +109,7 @@ def __parse_pos(pos_file: str) -> Iterator[str, int, str]:
 
 # 解析位置文件（POS格式，BED格式，或VCF格式）
 # locus_iter = parse_locus(locus_file, format = 'POS')
-def parse_locus(locus_file: str, file_format: str) -> Iterator[str, int, str]:
+def parse_locus(locus_file: str, file_format: str, locus_use_no_pass = False) -> Iterator[str, int, str]:
    '''
    根据输入文件的格式，返回一个包含染色体和位置的Iterator
 
@@ -120,6 +120,9 @@ def parse_locus(locus_file: str, file_format: str) -> Iterator[str, int, str]:
       **file_format**: str
          位置文件的格式, 'POS'，'BED'，'VCF'
 
+      **locus_use_no_pass**: bool
+         如果LOCUS文件为VCF格式，是否使用不是PASS的位点？
+
    Return: locus_iter：Iterator
             返回Iterator[str, int]
             str 为染色体名称，
@@ -127,7 +130,7 @@ def parse_locus(locus_file: str, file_format: str) -> Iterator[str, int, str]:
    '''
 
    if file_format == 'VCF':
-      iterator = __parse_vcf(locus_file)
+      iterator = __parse_vcf(locus_file, locus_use_no_pass)
       return iterator
 
    if file_format == 'POS':

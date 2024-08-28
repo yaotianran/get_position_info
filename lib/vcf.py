@@ -78,7 +78,7 @@ def get_real_variants_from_realsite(real_site_file: str) -> dict:
 # 输出为一个字典 {(chrom, pos):[variant_1, variant_2, ....]}
 # 真实位点文件为一个tsv文本文件，chrom pos variant_1 variant_2 ....
 # variant的格式为samtools风格， 例如'A', 'T', '*', ‘+2AC’， ‘-3NNN’等
-def get_real_variants_from_vcf(vcf_file: str, pass_only = True, qual = 0) -> dict:
+def get_real_variants_from_vcf(vcf_file: str, qual = 0, no_gt_fall_back = 'homo') -> dict:
    '''
    读取vcf文件中特定位置的pos，genotype ref和alt信息
    返回一个字典，格式为 {(chrom, pos):[variant_1, variant_2, ....]}。用来作为对比pysam输出的结果是否match
@@ -95,11 +95,12 @@ def get_real_variants_from_vcf(vcf_file: str, pass_only = True, qual = 0) -> dic
       **vcf_file**: string
          vcf文件，可以zip压缩
 
-      **pass_only**: bool
-         只读入PASS的位点
-
       **qual**: int
          只读入QUAL字段大于等于该值的位点
+
+      **no_gt_fail_back**: str
+         homo或者het，当位点没有GT信息时，默认为杂合位点还是纯合位点
+
 
    Return:
       **real_site_dict**: dict
@@ -146,35 +147,39 @@ def get_real_variants_from_vcf(vcf_file: str, pass_only = True, qual = 0) -> dic
             format_str = line_lst[8]
             sample_str = line_lst[9]
 
-            if pass_only and filter_str != 'PASS':
+            if filter_str != 'PASS':
                raise ValueError('FILTER is not PASS.')
 
             if qual_int < qual:
                raise ValueError('QUAL is less than {}'.format(qual))
 
-            if 'GT' not in format_str:
-               raise TypeError('FORMAT string does not have GT tag.')
+            if 'GT' in format_str:  # 如果有GT信息
+               gt_index = format_str.split(':').index('GT')
+               gt_str = sample_str.split(':')[gt_index]
+               if '/' in gt_str:
+                  gt_lst = gt_str.split('/')
+               elif '|' in gt_str:
+                  gt_lst = gt_str.split('|')
+               else:
+                  continue
+
+               gt_lst = list(set(gt_lst))
+               gt_lst.sort()
+               gt_lst = [int(x) for x in gt_lst] #  在双倍体中，形如 [0, 1] （杂合）或者 [1, 2]（双alt杂合），或者 [1]（纯合）
+
+            else:  # 如果没有GT信息
+
+               if no_gt_fall_back == 'het':
+                  gt_lst = [0, 1]
+               elif no_gt_fall_back == 'homo':
+                  gt_lst = [1]
+
 
          except Exception as ex:
             message = '跳过该条目'
             print(ex, message, line_str.strip())
             continue
 
-         if n % 100000 == 0:
-            print(n, chrom, pos, ref, alt, '                            ', end = '\r')
-
-         gt_index = format_str.split(':').index('GT')
-         gt_str = sample_str.split(':')[gt_index]
-         if '/' in gt_str:
-            gt_lst = gt_str.split('/')
-         elif '|' in gt_str:
-            gt_lst = gt_str.split('|')
-         else:
-            continue
-
-         gt_lst = list(set(gt_lst))
-         gt_lst.sort()
-         gt_lst = [int(x) for x in gt_lst] #  在双倍体中，形如 [0, 1] （杂合）或者 [1, 2]（双alt杂合），或者 [1]（纯合）
 
 
          pos_in_this_loop_lst = []  # 记录每一行vcf文件衍生的真实位点，用于写入realsite文件
@@ -207,6 +212,8 @@ def get_real_variants_from_vcf(vcf_file: str, pass_only = True, qual = 0) -> dic
 
 
          # 累加计数器
+         if n % 100000 == 0:
+            print(n, chrom, pos, ref, alt, '                            ', end = '\r')
          n += 1
 
    print('read', n - 1, 'sites.                 ')

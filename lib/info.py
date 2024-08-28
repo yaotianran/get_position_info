@@ -145,7 +145,7 @@ def __output_attr(pos_info:PositionInfo, attribute: str) -> str:
       sys.exit(message)
 
 
-   # 通用属性
+   # 如果是list
    if isinstance(value, list):
       if value == []:
          return ''
@@ -159,18 +159,31 @@ def __output_attr(pos_info:PositionInfo, attribute: str) -> str:
          value = list(set(value))
          return str(value)[1:-1].replace("'", "")
 
+   # 如果是 int
    if isinstance(value, int):
-      return str(value)
+      if value == 0:
+         return ''
+      else:
+         return str(value)
 
+   # 如果是 float
    if isinstance(value, float):
-      return str(round(value, 1))
+      if value == 0.0:
+         return ''
+      elif 'MAF' in attribute:
+         return str(round(value * 100, 1)) + '%'
+      else:
+         return str(round(value, 1))
 
+   # 如果是counter
    if isinstance(value, collections.Counter):
       return str(value)[9:-2].replace("'", '')
 
+   # 如果是None
    if value is None:
       return ''
 
+   # fallback
    return str(value)
 
 
@@ -203,7 +216,8 @@ def output_attributes_pos_info(pos_info:PositionInfo, attributes: list[str, ...]
 
 # 输入一个PositionInfo对象，利用副作用，设置PositionInfo对象内部的一些其他属性
 # 设置了以下属性：
-# X_mean_seq_quality    # X in 'A T C G N miss
+# X_MAF # X in A T C G N miss
+# X_mean_seq_quality    # X in A T C G N miss
 # ins_mean_seq_quality
 # matched_snp_mean_seq_quality
 # unmatched_snp_mean_seq_quality
@@ -218,7 +232,7 @@ def output_attributes_pos_info(pos_info:PositionInfo, attributes: list[str, ...]
 # matched_indel_mean_MAPQ
 # unmatched_indel_mean_MAPQ
 
-# X_mean_cycle    # X in 'A T C G N miss
+# X_mean_cycle    # X in A T C G N miss
 # del_mean_cycle
 # ins_mean_cycle
 # matched_snp_mean_cycle
@@ -229,11 +243,13 @@ def output_attributes_pos_info(pos_info:PositionInfo, attributes: list[str, ...]
 # indel_length_counter
 # query_snp_counter
 # query_indel_counter
-def add_attributes_pos_info(pos_info:PositionInfo) -> int:
+def add_attributes_pos_info(pos_info:PositionInfo, loh_cutoff = 0.2) -> int:
    '''
    输入一个PositionInfo对象，利用副作用，设置PositionInfo对象内部的一些其他属性
-   '''
 
+   loh_cutoff: 只有MAF大于等于此值的SNP才视为检测到的SNP
+   '''
+   # 通用属性
    for base in ['A', 'T', 'C', 'G', 'N', 'miss', 'matched_snp', 'unmatched_snp', 'matched_ins', 'unmatched_ins', 'matched_indel', 'unmatched_indel']:
       for attr in ['seq_quality', 'MAPQ', 'cycle']:
          try:
@@ -257,19 +273,23 @@ def add_attributes_pos_info(pos_info:PositionInfo) -> int:
    pos_info.query_snp_counter = collections.Counter(pos_info.query_snp) if pos_info.query_snp != [] else None
    pos_info.query_indel_counter = collections.Counter(pos_info.query_indel) if pos_info.query_indel != [] else None
 
+   # 添加X_MAF
+   for base in ['A', 'T', 'C', 'G', 'N', 'miss']:
+      if pos_info.coverage is not None:
+         maf = sum(getattr(pos_info, f'{base}_count')) / pos_info.coverage
+      else:
+         maf = 0.0
+      setattr(pos_info, f'{base}_MAF', maf)
 
    # 检测LOH
-   MAF = 0.1  #  只有MAF大于此值的SNP才视为检测到的SNP
    if pos_info.query_snp_counter is not None and pos_info.real_allele_snp is not None and len(pos_info.real_allele_snp) == 2:
       for snp in pos_info.real_allele_snp:
-         if pos_info.query_snp_counter[snp] / pos_info.coverage < MAF:
+         if pos_info.query_snp_counter[snp] / pos_info.coverage < loh_cutoff:
             pos_info.LOH_snp.append(snp)
 
-
-   MAF = 0.1  #  只有MAF大于此值的InDel才视为检测到的InDel
    if pos_info.query_indel_counter is not None and pos_info.real_allele_indel is not None and len(pos_info.real_allele_indel) >= 2:
       for indel in pos_info.real_allele_indel:
-         if pos_info.query_indel_counter[indel] / pos_info.coverage < MAF:
+         if pos_info.query_indel_counter[indel] / pos_info.coverage < loh_cutoff:
             pos_info.LOH_indel.append(indel)
 
    return 0
