@@ -1,5 +1,10 @@
 # get_position_info，一个检查bam文件特定位点的相关信息的脚本
 
+此小工具为此项目而编写，项目草稿已上传
+[Comparison of Three Next Generation Sequencers on Their Basecall Error Rates and Bias Patterns](https://github.com/yaotianran/get_position_info/blob/master/Basecall-Bias-Comare-vF_ABB.docx)
+
+========================================================================================================================================================================
+
 当你拿到一个小panel富集测序结果，或者全外测序结果，你可能只对某些特定的位点或者区域感兴趣。你需要收集特定位点的一些信息，例如测序覆盖度，碱基组成，是否和已知位点信息相符等等，你可以使用这个脚本来检测bam文件特定位点的信息并且输出成tsv文本格式。
 
 输出示例：
