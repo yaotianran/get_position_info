@@ -1,7 +1,9 @@
 # get_position_info，一个检查bam文件特定位点的相关信息的脚本
 
-此小工具为此项目而编写，项目草稿已上传
-[Comparison of Three Next Generation Sequencers on Their Basecall Error Rates and Bias Patterns](https://github.com/yaotianran/get_position_info/blob/master/Basecall-Bias-Comare-vF_ABB.docx)
+此小工具为此项目而编写，以下为项目草稿
+
+- [Comparison of Three Next Generation Sequencers on Their Basecall Error Rates and Bias Patterns](https://github.com/yaotianran/get_position_info/blob/master/Basecall-Bias-Comare-vF_ABB.docx)
+- [Comparative performance assessment  of the different exome capture panels in whole-exome sequencing](https://github.com/yaotianran/get_position_info/blob/master/Comparative%20performance%20assessment%20%20of%20the%20different%20exome%20capture%20panels%20in%20whole-exome%20sequencing-V3.docx)
 
 ========================================================================================================================================================================
 
